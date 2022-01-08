@@ -1,0 +1,242 @@
+.flaskevn --> main.py -- (Application folder . __init__.py)
+__init__.py --> Import routes
+
+in routes
+we have import what we need from other py files
+we have added def function
+we have added decorators
+and calling to each route path
+which page open default
+
+
+in model.py
+
+we have added db model class
+with basic validation like unique key and max length
+apart from that added password hashing
+we don't need to write code for this , this are available in python
+we just need to import relevant lib
+	from werkzeug.security import generate_password_hash, check_password_hash
+	like from security lib added  reference to two function only
+	generate_password_hash --> password to hash
+	check_password_hash --> hash to password
+
+
+
+in form.py
+
+we have add form code for each page, now to added form code we don't again need to write a code
+we just need to import "from flask_wtf import FlaskForm -- for form coding "
+we just need to import "from wtforms import StringField, PasswordField, SubmitField, BooleanField" to set the object type of those inputs on html page
+we just need to import "from wtforms.validators import DataRequired, Email, Length, EqualTo, ValidationError" to set the validation of those object type
+we just need to import "from application.models import User" to add user code
+
+
+back to routes.py the important when for navigation
+
+
+@app.route("/register", methods=['POST','GET'])
+--while added decorator we have added method of  post and get
+def register():
+	-- if existing user redirect to index page
+    if session.get('username'):
+        return redirect(url_for('index'))
+	-- else call registration form
+    form = RegisterForm()
+	-- on submit button validate form
+    if form.validate_on_submit():
+		-- added incremental user id number
+        user_id     = User.objects.count()
+        user_id     += 1
+		--added values to variable from form
+        email       = form.email.data
+        password    = form.password.data
+        first_name  = form.first_name.data
+        last_name   = form.last_name.data
+         --passed it to user db model class for save
+        user = User(user_id=user_id, email=email, first_name=first_name, last_name=last_name)
+		-- before that hash the password
+        user.set_password(password)
+        user.save()
+        flash("You are successfully registered!","success")
+		--redirect to index page
+        return redirect(url_for('index'))
+
+    return render_template("register.html", title="Register", form=form, register=True)
+
+
+-- added method get and post
+--in framework you don't need to write every pcs of code
+
+@app.route("/login", methods=['GET','POST'])
+
+def login():
+	-- if session already has validated user then redirect to index
+    if session.get('username'):
+        return redirect(url_for('index'))
+    -- else open login page
+    form = LoginForm()
+	-- on submit button validate form
+
+    if form.validate_on_submit():
+		--added values to variable from form
+        email       = form.email.data
+        password    = form.password.data
+
+		-- search user exists with same email id (top 1 instance is enough)
+
+        user = User.objects(email=email).first()
+		-- if user exists and password matched --login and set the session
+
+        if user and user.get_password(password):
+            flash(f"{user.first_name}, you are successfully logged in!", "success")
+            session['user_id'] = user.user_id
+            session['username'] = user.first_name
+            return redirect("/index")
+        -- else added the popup
+		else:
+            flash("Sorry, something went wrong.","danger")
+    return render_template("login.html", title="Login", form=form, login=True )
+
+
+-- added method get and post
+--in framework you don't need to write every pcs of code
+
+
+@app.route("/enrollment", methods=["GET","POST"])
+def enrollment():
+	--check if session exists
+    if not session.get('username'):
+        return redirect(url_for('login'))
+
+	--check if session courseid
+    courseID = request.form.get('courseID')
+    courseTitle = request.form.get('title')
+	--get session userid
+    user_id = session.get('user_id')
+
+	--get courseid
+    if courseID:
+        if Enrollment.objects(user_id=user_id,courseID=courseID):
+            flash(f"Oops! You are already registered in this course {courseTitle}!", "danger")
+            return redirect(url_for("courses"))
+        else:
+            Enrollment(user_id=user_id,courseID=courseID).save()
+            flash(f"You are enrolled in {courseTitle}!", "success")
+
+	-- mongo aggregation function
+	-- searching course in which this user enrolled
+    classes = course_list(user_id)
+
+    return render_template("enrollment.html", enrollment=True, title="Enrollment", classes=classes)
+
+--mongo db aggregation
+--course_list.py
+--def course_list(user_id):
+--aggregation is nothing but preparing query to get the data
+--like user id -- enrollment -- courseid -- course
+--so lookup userid in enrollment
+--so unwind result -- remove null results
+--match and sort the result
+
+like app.route decorator
+you have api route decorator
+
+#######################################
+
+@api.route('/api','/api/')
+
+## to get the response
+## it can be all or you can set it on parameter based
+
+class GetAndPost(Resource):
+
+    #GET ALL
+    def get(self):
+        ## using user model return all user and jsonify them
+        return jsonify(User.objects.all())
+
+    #POST
+    def post(self):
+        ## get the data from api request
+        ## set it to model columns
+        ## and save it
+        data = api.payload
+        user = User(user_id=data['user_id'], email=data['email'], first_name=data['first_name'], last_name=data['last_name'])
+        user.set_password(data['password'])
+        user.save()
+        return jsonify(User.objects(user_id=data['user_id']))
+
+@api.route('/api/<idx>')
+class GetUpdateDelete(Resource):
+
+    #GET ONE
+    def get(self,idx):
+        return jsonify(User.objects(user_id=idx))
+
+    #PUT
+    def put(self,idx):
+        ## get the data from api request
+        data = api.payload
+        ## update it to model columns
+        User.objects(user_id=idx).update(**data)
+        return jsonify(User.objects(user_id=idx))
+
+    #DELETE
+    def delete(self,idx):
+        User.objects(user_id=idx).delete()
+        ## delete the user on the basis of user id
+        return jsonify("User is deleted!")
+
+#######################################
+
+
+HTML Code
+--calling other form
+{% extends "layout.html" %}
+--calling block
+{% block content %}
+--calling variable
+<h1>{{ title }} </h1>
+--if condition
+{% if not classes %}
+
+-- mongo db container up and running
+
+--mongo db container
+--docker pull mongo
+--docker run -d  --name mongo-on-docker  -p 27888:27017 -e MONGO_INITDB_ROOT_USERNAME=mongoadmin -e MONGO_INITDB_ROOT_PASSWORD=secret mongo
+--docker exec -it mongo-on-docker mongo
+--create collection and then create user and assign role to that user
+--   MONGODB_SETTINGS = {'db' : 'UTA_Enrollment', 'host':'localhost', 'port' : 27888, 'USERNAME' : 'mongoadmin' , 'PASSWORD' : 'secret'}
+
+-- to python project commands
+to update requirement file
+--pip freeze > .\requirements.txt
+
+to run application
+--flask run
+
+to install modules
+--pip install <install lib>
+
+-- this command will generate secret key from system
+py -c "import os; print (os.urandom(16))"
+
+
+<!footer page code , now this can be include where ever we want by just adding>
+<!{% include "includes/footer.html" %}>
+
+<!nav page code , now this can be include where ever we want by just adding>
+<!{% include "includes/nav.html" %}>
+<!instead of hardcoded html page in menu/navigation we are calling function available on routes page>
+
+-- jina and flask template
+-- has already project structure setup
+-- like when you put any thing in template folder you can call it using render_template
+-- same like we have created base template and calling base template in each child template
+--  {% extends "layout.html" %}
+--  {% block content %}
+
+
+
